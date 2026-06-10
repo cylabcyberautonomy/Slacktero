@@ -1,0 +1,20 @@
+services:
+  translation-server:
+    image: translation-server-local
+    # NOTE: the `latest` tag is arm64-only. On an x86 host, either pin an
+    # amd64 build:
+    #     image: zotero/translation-server:2.0.4
+    # or build from source (see README) to get current translators on any arch.
+    restart: unless-stopped
+    expose:
+      - "1969"          # internal only; the bot reaches it over the compose network
+
+  bot:
+    build: ./bot
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - TRANSLATION_SERVER_URL=http://translation-server:1969
+    depends_on:
+      - translation-server
+    # No ports published: Socket Mode connects outbound to Slack.
