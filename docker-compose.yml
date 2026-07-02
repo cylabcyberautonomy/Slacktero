@@ -1,16 +1,19 @@
 services:
   translation-server:
-    image: translation-server-local
-    # NOTE: the `latest` tag is arm64-only. On an x86 host, either pin an
-    # amd64 build:
-    #     image: zotero/translation-server:2.0.4
-    # or build from source (see README) to get current translators on any arch.
+    # Built from source (see translation-server.Dockerfile). The published
+    # image is arm64-only, so on x86 we build; this also keeps translators
+    # current. No manual pre-clone — compose fetches the source at build time.
+    build:
+      context: .
+      dockerfile: docker/translation-server.Dockerfile
     restart: unless-stopped
     expose:
       - "1969"          # internal only; the bot reaches it over the compose network
 
   bot:
-    build: ./bot
+    build:
+      context: .
+      dockerfile: docker/bot.Dockerfile
     restart: unless-stopped
     env_file: .env
     environment:
