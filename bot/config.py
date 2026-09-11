@@ -24,6 +24,16 @@ class Config:
     translation_server_url: str = "http://translation-server:1969"
     log_level: str = "INFO"  # set LOG_LEVEL=DEBUG to see the per-add trace
 
+    def save(self) -> None:
+        lines = ["domains = ["]
+        lines += [f'  "{d}",' for d in self.watched_domains]
+        lines += ["]", "", "[tags]"]
+        lines += [f'"{t}" = "{e}"' for t, e in self.tags.items()]
+        lines += ["", "[projects]"]
+        lines += [f'"{p}" = [' + ", ".join(f'"{t}"' for t in ts) + "]"
+                  for p, ts in self.projects.items()]
+        CONFIG_FILE.write_text("\n".join(lines) + "\n")
+
     @classmethod
     def from_env(cls) -> "Config":
         data = tomllib.loads(CONFIG_FILE.read_text())

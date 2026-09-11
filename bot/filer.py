@@ -183,6 +183,44 @@ class Filer:
                 break
         return found[:limit]
 
+    def untag_all(self, name: str) -> int:
+        keys, start = [], 0
+        while True:
+            resp = requests.get(
+                f"{self.base}/items",
+                params={"format": "json", "itemType": "-attachment",
+                        "tag": name, "limit": self.PAGE, "start": start},
+                headers=self.headers,
+                timeout=30,
+            )
+            resp.raise_for_status()
+            page = resp.json()
+            keys += [e["data"]["key"] for e in page]
+            start += len(page)
+            if len(page) < self.PAGE:
+                break
+
+        for key in keys:
+            self.tag(key, name, False)
+        log.debug("untagged %r from %d items", name, len(keys))
+        return len(keys)
+
+    def drop_project(self, name: str) -> None:
+        key = self.collection_keys().get(name)
+        self.collections = {}
+        if not key:
+            return
+        resp = requests.get(f"{self.base}/collections/{key}", headers=self.headers, timeout=30)
+        resp.raise_for_status()
+        resp = requests.delete(
+            f"{self.base}/collections/{key}",
+            headers={**self.headers,
+                     "If-Unmodified-Since-Version": str(resp.json()["version"])},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        log.debug("deleted collection %s (%s)", name, key)
+
     def find_existing(self, item: dict) -> str | None:
         self.sync()
         doi = (item.get("DOI") or "").strip().lower()

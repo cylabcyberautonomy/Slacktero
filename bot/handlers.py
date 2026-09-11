@@ -21,7 +21,8 @@ log = logging.getLogger("slacktero")
 
 class Handler:
     LINK = re.compile(r"<(https?://[^>|\s]+)")
-    FILE = re.compile(r"\bfile\b(?:\s+(\d+))?", re.I)
+    MENTION = re.compile(r"<@[^>]+>")
+    UNSAFE = re.compile(r'["\\]')
     VENUE = ("publicationTitle", "proceedingsTitle", "repository", "publisher")
     MAX_BACKLOG = 10
 
@@ -92,6 +93,8 @@ class Handler:
                 "`@Slacktero tags` \u2014 what each emoji tags a paper with",
                 f"`@Slacktero file [n]` \u2014 list the n newest unfiled papers to tag "
                 f"(default 5, max {self.MAX_BACKLOG})",
+                "`@Slacktero tag add|remove <name> [emoji]` \u2014 change the tag list",
+                "`@Slacktero project add|remove <name> [tag ...]` \u2014 change the projects",
                 "`@Slacktero help` \u2014 this message",
                 "",
                 f"DM me a link too. Links from {domains} are filed automatically, "
@@ -122,6 +125,67 @@ class Handler:
                  f"<{url}>" if url else "",
                  f"https://www.zotero.org/groups/{self.cfg.zotero_group_id}/items/{data['key']}"]
         return "\n".join(x for x in lines if x)
+
+    def configure(self, event: dict, kind: str, parts: list[str]) -> None:
+        try:
+            self.say(event, self.mutate(kind, parts))
+        except Exception as e:
+            log.exception("configure failed")
+            self.say(event, f":x: {e}")
+
+    def mutate(self, kind: str, parts: list[str]) -> str:
+        action, args = (parts[0].lower() if parts else ""), parts[1:]
+        if action not in ("add", "remove") or not args:
+            return f"Usage: `@Slacktero {kind} add|remove <name> ...`"
+        name = args[0]
+        if self.UNSAFE.search(" ".join(args)):
+            return ":x: names cannot contain quotes or backslashes"
+
+        if kind == "tag" and action == "add":
+            if len(args) != 2:
+                return "Usage: `@Slacktero tag add <name> <emoji>`"
+            emoji = args[1].strip(":")
+            if name in self.cfg.tags:
+                return f":x: tag `{name}` already exists"
+            if emoji in self.cfg.tags.values():
+                return f":x: :{emoji}: is already used by another tag"
+            self.cfg.tags[name] = emoji
+            self.cfg.save()
+            return f"Added `{name}` :{emoji}:"
+
+        if kind == "tag" and action == "remove":
+            if name not in self.cfg.tags:
+                return f":x: no such tag `{name}`"
+            del self.cfg.tags[name]
+            for project, tags in list(self.cfg.projects.items()):
+                self.cfg.projects[project] = tuple(t for t in tags if t != name)
+            self.cfg.save()
+            self.filer.collections = {}
+            return f"Removed `{name}` from {self.filer.untag_all(name)} paper(s)"
+
+        if action == "add":
+            tags = args[1:]
+            if not tags:
+                return "Usage: `@Slacktero project add <name> <tag> [tag ...]`"
+            unknown = [t for t in tags if t not in self.cfg.tags]
+            if unknown:
+                return f":x: no such tag(s): {', '.join(f'`{t}`' for t in unknown)}"
+            self.cfg.projects[name] = tuple(tags)
+            self.cfg.save()
+            self.filer.collections = {}
+            self.filer.collection_keys()
+            return f"*{name}* now files " + ", ".join(f"`{t}`" for t in tags)
+
+        if name not in self.cfg.projects:
+            return f":x: no such project `{name}`"
+        self.filer.drop_project(name)
+        del self.cfg.projects[name]
+        self.cfg.save()
+        return f"Removed *{name}*. Its papers stay in the library."
+
+    def say(self, event: dict, text: str) -> None:
+        self.client.chat_postMessage(
+            channel=event["channel"], thread_ts=self.thread_ts(event), text=text)
 
     def react(self, channel: str, ts: str, name: str) -> None:
         log.debug("reacting :%s: on %s/%s", name, channel, ts)
@@ -171,16 +235,21 @@ class PingHandler(Handler):
     def handle(self, event: dict) -> None:
         text = event.get("text", "")
         urls = self.links(text)
-        words = text.lower().split()
-        wants_backlog = self.FILE.search(text)
         if urls:
             self.spawn(self.add, urls[0], event["channel"], event["ts"])
-        elif "help" in words:
+            return
+
+        parts = self.MENTION.sub(" ", text).split()
+        command = parts[0].lower() if parts else ""
+        if command == "help":
             self.help_reply(event)
-        elif "tags" in words:
+        elif command == "tags":
             self.tags_reply(event)
-        elif wants_backlog:
-            self.spawn(self.backlog, event["channel"], int(wants_backlog.group(1) or 5))
+        elif command == "file":
+            count = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 5
+            self.spawn(self.backlog, event["channel"], count)
+        elif command in ("tag", "project"):
+            self.spawn(self.configure, event, command, parts[1:])
         else:
             self.usage_reply(event)
 
