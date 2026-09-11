@@ -6,7 +6,7 @@ COPY bot/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY bot/ ./bot/
-COPY main.py .
+COPY main.py slacktero.toml ./
 
 # -u keeps logs unbuffered so `docker compose logs` is live.
 CMD ["python", "-u", "main.py"]

@@ -18,6 +18,8 @@ services:
     env_file: .env
     environment:
       - TRANSLATION_SERVER_URL=http://translation-server:1969
+    volumes:
+      - ./slacktero.toml:/app/slacktero.toml:ro
     depends_on:
       - translation-server
     # No ports published: Socket Mode connects outbound to Slack.

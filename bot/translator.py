@@ -23,7 +23,7 @@ class Translator:
 
     # The write API rejects these on a top-level create (child items / server-assigned).
     STRIP_FIELDS = ("key", "version", "dateAdded", "dateModified",
-                    "attachments", "notes")
+                    "attachments", "notes", "tags")
 
     def __init__(self, cfg: Config):
         self.server = cfg.translation_server_url

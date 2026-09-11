@@ -1,0 +1,16 @@
+domains = [
+  "arxiv.org",
+  "ieee.org",
+]
+
+[tags]
+"rca" = "mag"
+"sec:offense" = "crossed_swords"
+"sec:defense" = "shield"
+"llm:interpretability" = "brain"
+"llm:guardrails" = "construction"
+
+[projects]
+"Dissect" = ["rca", "sec:offense"]
+"AttackDefense" = ["sec:offense", "sec:defense"]
+"Guardrails" = ["llm:guardrails"]

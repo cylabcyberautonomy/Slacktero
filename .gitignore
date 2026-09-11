@@ -2,3 +2,4 @@
 translation-server/
 __pycache__/
 *.pyc
+claude_changelog.txt

@@ -7,8 +7,8 @@ from slack_bolt.adapter.socket_mode import SocketModeHandler
 
 from .config import Config
 from .translator import Translator
-from .uploader import Uploader
-from .handlers import PingHandler, DMHandler, ChannelHandler
+from .filer import Filer
+from .handlers import PingHandler, DMHandler, ChannelHandler, ReactionHandler
 
 
 def main():
@@ -17,10 +17,9 @@ def main():
     app = App(token=cfg.slack_bot_token)
     bot_id = app.client.auth_test()["user_id"]
 
-    translator, uploader = Translator(cfg), Uploader(cfg)
-    ping = PingHandler(translator, uploader, app.client, bot_id)
-    dm = DMHandler(translator, uploader, app.client, bot_id)
-    channel = ChannelHandler(translator, uploader, app.client, bot_id)
+    args = (Translator(cfg), Filer(cfg), app.client, bot_id, cfg)
+    ping, dm, channel = PingHandler(*args), DMHandler(*args), ChannelHandler(*args)
+    reaction = ReactionHandler(*args)
 
     @app.event("app_mention")
     def _mention(event):
@@ -31,5 +30,13 @@ def main():
         if event.get("subtype"):  # skip edits/joins/bot posts
             return
         (dm if event.get("channel_type") == "im" else channel).handle(event)
+
+    @app.event("reaction_added")
+    def _reaction_added(event):
+        reaction.handle(event)
+
+    @app.event("reaction_removed")
+    def _reaction_removed(event):
+        reaction.handle(event)
 
     SocketModeHandler(app, cfg.slack_app_token).start()
